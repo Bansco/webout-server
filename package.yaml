@@ -1,0 +1,77 @@
+name:                webout-server
+version:             0.1.0.0
+github:              "bansco/webout-server"
+license:             MIT
+author:              "Bansco"
+maintainer:          "gillchristiang@gmail.com"
+copyright:           "2020 Bansco"
+
+extra-source-files:
+- readme.md
+
+synopsis:            Server for webout terminal cast to web
+category:            Web
+description:         Please see the README on GitHub at <https://github.com/bansco/webout-server#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+- aeson
+- bson
+- bytestring
+- casing
+- conduit
+- ekg
+- ekg-core
+- fast-logger
+- http-client
+- http-media
+- http-types
+- katip
+- monad-control
+- monad-logger
+- mtl
+- network-uri
+- parsec
+- postgresql-simple
+- postgresql-simple-migration
+- resource-pool
+- safe
+- servant
+- servant-server
+- servant-websockets
+- stm
+- text
+- time
+- transformers
+- unordered-containers
+- wai
+- wai-cors
+- wai-extra
+- warp
+- websockets
+- wreq
+
+library:
+  source-dirs: src
+
+executables:
+  webout-server-exe:
+    main:                Main.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - webout-server
+
+tests:
+  webout-server-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - webout-server
