@@ -13,9 +13,11 @@ import Config
     setLogger,
   )
 import Control.Concurrent (killThread)
+import Control.Concurrent.STM as STM
 import Control.Exception (bracket)
 import Control.Monad (void)
 import qualified Data.ByteString.Char8 as BS
+import Data.HashMap.Strict as HM hiding (null)
 import qualified Data.Pool as Pool
 import Data.Text.Encoding (encodeUtf8)
 import Database (initializeDatabase)
@@ -58,11 +60,11 @@ acquireConfig :: IO Config
 acquireConfig = do
   port <- lookupSetting "PORT" 9000
   env <- lookupSetting "ENV" Development
-  baseUrl <- lookupSetting "BASE_URL" "http://localhost:9000"
   clientUrl <- lookupSetting "CLIENT_URL" "http://localhost:3000"
   logEnv <- defaultLogEnv
   pool <- makePool env logEnv
   ekgServer <- forkServer "localhost" =<< lookupSetting "PORT_EKG" 8000
+  channels <- STM.atomically $ STM.newTVar HM.empty
   pure
     Config
       { configPool = pool,
@@ -70,8 +72,8 @@ acquireConfig = do
         configLogEnv = logEnv,
         configPort = port,
         configEkgServer = serverThreadId ekgServer,
-        configBaseUrl = baseUrl,
-        configClientUrl = clientUrl
+        configClientUrl = clientUrl,
+        configCastChannels = channels
       }
 
 -- | Takes care of cleaning up 'Config' resources

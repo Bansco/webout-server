@@ -15,7 +15,9 @@ module Config
   )
 where
 
+import Api.Cast.Models
 import Control.Concurrent (ThreadId)
+import Control.Concurrent.STM as STM
 import Control.Exception (throwIO)
 import Control.Monad.Except (ExceptT, MonadError)
 import Control.Monad.IO.Class (MonadIO, liftIO)
@@ -68,8 +70,8 @@ data Config = Config
     configEkgServer :: ThreadId,
     configLogEnv :: LogEnv,
     configPort :: Port,
-    configBaseUrl :: Text,
-    configClientUrl :: Text
+    configClientUrl :: Text,
+    configCastChannels :: STM.TVar Channels
   }
 
 -- | Katip instance for @AppT m@

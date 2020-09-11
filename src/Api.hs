@@ -34,7 +34,7 @@ appToServer cfg = hoistServer appApi (convertApp cfg) appServer
 convertApp :: Config -> AppT IO a -> Handler a
 convertApp cfg appt = Handler $ runReaderT (runApp appt) cfg
 
-type AppAPI = HealthzRoute :<|> CastAPI
+type AppAPI = HealthzRoute :<|> "api" :> "cast" :> CastAPI
 
 healthzHandler :: MonadIO m => AppT m Text
 healthzHandler = pure "200 Ok"
