@@ -20,9 +20,11 @@ dependencies:
 - bytestring
 - casing
 - conduit
+- containers
 - ekg
 - ekg-core
 - fast-logger
+- hashable
 - http-client
 - http-media
 - http-types
@@ -34,6 +36,7 @@ dependencies:
 - parsec
 - postgresql-simple
 - postgresql-simple-migration
+- random
 - resource-pool
 - safe
 - servant
@@ -44,6 +47,7 @@ dependencies:
 - time
 - transformers
 - unordered-containers
+- uuid
 - wai
 - wai-cors
 - wai-extra

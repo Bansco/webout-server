@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 73043105f11266cf157d9dc8714bd77e8c8c7914741bc2d8df86a00e47df97e5
+-- hash: 2069c9552bc5fd56b61a89a05c41ecf225eb8fbb67a6bc3cca9011567a796df6
 
 name:           webout-server
 version:        0.1.0.0
@@ -47,9 +47,11 @@ library
     , bytestring
     , casing
     , conduit
+    , containers
     , ekg
     , ekg-core
     , fast-logger
+    , hashable
     , http-client
     , http-media
     , http-types
@@ -61,6 +63,7 @@ library
     , parsec
     , postgresql-simple
     , postgresql-simple-migration
+    , random
     , resource-pool
     , safe
     , servant
@@ -71,6 +74,7 @@ library
     , time
     , transformers
     , unordered-containers
+    , uuid
     , wai
     , wai-cors
     , wai-extra
@@ -93,9 +97,11 @@ executable webout-server-exe
     , bytestring
     , casing
     , conduit
+    , containers
     , ekg
     , ekg-core
     , fast-logger
+    , hashable
     , http-client
     , http-media
     , http-types
@@ -107,6 +113,7 @@ executable webout-server-exe
     , parsec
     , postgresql-simple
     , postgresql-simple-migration
+    , random
     , resource-pool
     , safe
     , servant
@@ -117,6 +124,7 @@ executable webout-server-exe
     , time
     , transformers
     , unordered-containers
+    , uuid
     , wai
     , wai-cors
     , wai-extra
@@ -141,9 +149,11 @@ test-suite webout-server-test
     , bytestring
     , casing
     , conduit
+    , containers
     , ekg
     , ekg-core
     , fast-logger
+    , hashable
     , http-client
     , http-media
     , http-types
@@ -155,6 +165,7 @@ test-suite webout-server-test
     , parsec
     , postgresql-simple
     , postgresql-simple-migration
+    , random
     , resource-pool
     , safe
     , servant
@@ -165,6 +176,7 @@ test-suite webout-server-test
     , time
     , transformers
     , unordered-containers
+    , uuid
     , wai
     , wai-cors
     , wai-extra
