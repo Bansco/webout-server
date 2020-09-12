@@ -42,7 +42,8 @@ newtype Token = Token Text
   deriving (Show, Eq, Generic, Json.FromJSON, Json.ToJSON)
 
 data CreateResponse = CreateResponse
-  { createId :: Text,
+  { createId :: ID,
+    createUrl :: Text,
     createToken :: Token
   }
   deriving stock (Generic, Show)
