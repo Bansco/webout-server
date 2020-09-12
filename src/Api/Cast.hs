@@ -18,10 +18,11 @@ where
 
 import Api.Cast.Models
 import Config (AppT (..), Config (..))
-import Control.Concurrent (forkIO)
+import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.STM (STM)
 import qualified Control.Concurrent.STM as STM
 import qualified Control.Exception as Exception
+import Control.Monad ((<=<))
 import qualified Control.Monad as Monad
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (asks)
@@ -42,7 +43,7 @@ import qualified Network.URI as URI
 import qualified Network.WebSockets as Ws
 import Servant ((:<|>) (..), (:>))
 import qualified Servant
-import Servant.API.WebSocket (WebSocket)
+import Servant.API.WebSocket (WebSocketPending)
 import qualified System.Random as Random
 import Prelude
 
@@ -56,12 +57,10 @@ type CastWsRoute =
   "ws"
     :> Servant.Capture "short" Text -- TODO use Api.Cast.Models.ID
     :> Servant.QueryParam "token" Text
-    :> WebSocket
+    :> WebSocketPending
 
 castServer :: MonadIO m => Servant.ServerT CastAPI (AppT m)
-castServer =
-  createHandler
-    :<|> castWsHandler
+castServer = createHandler :<|> castWsHandler
 
 castApi :: Servant.Proxy CastAPI
 castApi = Servant.Proxy
@@ -75,82 +74,106 @@ createHandler = do
   counter <- liftIO $ STM.newTVarIO 0
   let newChan = Channel False [] (Token token) counter IM.empty
   liftIO $ STM.atomically $ STM.modifyTVar channels $ HM.insert (ID uuid) newChan
-  -- pure $ CreateResponse (clientUrl <> "/c/" <> uuid) $ Token token
-  pure $ CreateResponse uuid $ Token token
+  pure $ CreateResponse (ID uuid) (clientUrl <> "/c/" <> uuid) (Token token)
 
-castWsHandler :: MonadIO m => Text -> Maybe Text -> Ws.Connection -> AppT m ()
-castWsHandler id (Just token) c = do
+channelNotFound :: Ws.PendingConnection -> IO ()
+channelNotFound pendingC =
+  Ws.rejectRequestWith pendingC $
+    Ws.defaultRejectRequest {Ws.rejectCode = 404, Ws.rejectMessage = "Not found"}
+
+unauthorized :: Ws.PendingConnection -> IO ()
+unauthorized pendingC =
+  Ws.rejectRequestWith pendingC $
+    Ws.defaultRejectRequest {Ws.rejectCode = 401, Ws.rejectMessage = "Unauthorized"}
+
+castWsHandler :: MonadIO m => Text -> Maybe Text -> Ws.PendingConnection -> AppT m ()
+castWsHandler id (Just token) pendingC = do
   channels <- asks configCastChannels
   mbChannel <- liftIO $ HM.lookup (ID id) <$> STM.readTVarIO channels
-  liftIO $ print =<< HM.keys <$> STM.readTVarIO channels
   case mbChannel of
-    Nothing -> Servant.throwError Servant.err404
+    Nothing -> liftIO $ channelNotFound pendingC
     Just chan -> do
       -- TODO catch close error and cleanup
-      Monad.when (chanToken chan /= Token token) $ Servant.throwError Servant.err401
+      Monad.when (chanToken chan /= Token token) $ liftIO $ unauthorized pendingC
+      c <- liftIO $ Ws.acceptRequest pendingC
       liftIO $
-        flip Exception.finally (STM.atomically $ disconnectChan channels (ID id)) $
-          Monad.forever $ do
-            msg :: Text <- Ws.receiveData c
-            liftIO $ putStrLn $ Text.unpack $ "Go Message:\n" <> msg
-            mbChannel <- HM.lookup (ID id) <$> STM.readTVarIO channels
-            -- TODO make this prettier
-            -- TODO stop the loop
-            case mbChannel of
-              Nothing -> pure ()
-              Just chan -> broadcast chan msg
-castWsHandler id Nothing c = do
-  -- TODO catch close error and cleanup
+        flip
+          Exception.finally
+          ( do
+              clients <- fromMaybe [] <$> STM.atomically (disconnectChan channels (ID id))
+              -- TODO errors on close clients
+              Monad.forM_ clients $ flip Ws.sendClose ("Bye" :: Text)
+          )
+          $ Ws.withPingThread c 30 mempty $
+            Monad.forever $ do
+              msg :: Text <- Ws.receiveData c
+              -- TODO how to avoid reading channel if we know channel is defined here
+              mbChannel <- HM.lookup (ID id) <$> STM.readTVarIO channels
+              case mbChannel of
+                Nothing -> putStrLn "channel lost" -- TODO <----
+                Just chan -> broadcast chan msg
+castWsHandler id Nothing pendingC = do
   channels <- asks configCastChannels
-  mbClientId <- liftIO $ STM.atomically $ connect channels (ID id) c
-
-  liftIO $ print =<< HM.keys <$> STM.readTVarIO channels
-  liftIO $ print =<< HM.member (ID id) <$> STM.readTVarIO channels
-  liftIO $ print mbClientId
+  mbClientId <- liftIO $ STM.atomically $ getChanId channels (ID id)
 
   case mbClientId of
-    Nothing -> do
-      liftIO $ print $ "404 on " <> id
-      Servant.throwError Servant.err404
+    Nothing -> liftIO $ channelNotFound pendingC
     Just clientId -> do
-      liftIO $ print $ "200 on " <> id
+      c <- liftIO $ Ws.acceptRequest pendingC
+      liftIO $ STM.atomically $ inserClient channels (ID id) clientId c
+
+      -- TODO how to keep this connected and pinging without receiving ????
       liftIO $
-        flip Exception.finally (STM.atomically $ disconnectClient channels (ID id) clientId) $
-          -- TODO how to keep this connected and pinging ????
-          Ws.withPingThread c 30 Monad.mzero Monad.mzero
+        Exception.finally (pingThread c) $ do
+          STM.atomically $ disconnectClient channels (ID id) clientId
+          Ws.sendClose c ("Bye" :: Text) -- TODO what to send as close?
+
+pingThread :: Ws.Connection -> IO ()
+pingThread c = Ws.withPingThread c 30 mempty $ Monad.void (Ws.receiveData c :: IO Text)
 
 broadcast :: Channel -> Text -> IO ()
-broadcast chan = Monad.forM_ (chanConns chan) . flip Ws.sendTextData
+broadcast chan msg = Monad.forM_ (chanConns chan) $ \c ->
+  Exception.catch (Ws.sendTextData c msg) catchAll
+  where
+    -- we ignore the disconnection, as the listener endpoint should handle it
+    catchAll :: Ws.ConnectionException -> IO ()
+    catchAll _ = mempty
 
-connect :: STM.TVar Channels -> ID -> Ws.Connection -> STM (Maybe Int)
-connect channels chanId c = do
-  chans <- STM.readTVar channels
-  case HM.lookup chanId chans of
-    Nothing -> pure Nothing
+getChanId :: STM.TVar Channels -> ID -> STM (Maybe Int)
+getChanId channels chanId = do
+  mbChannel <- HM.lookup chanId <$> STM.readTVar channels
+  case mbChannel of
     Just chan -> do
       i <- STM.readTVar $ chanCounter chan
       let next = i + 1
-      let updatedChan = chan {chanConns = IM.insert next c $ chanConns chan}
-      STM.writeTVar channels $ HM.insert chanId updatedChan chans
       STM.writeTVar (chanCounter chan) next
       pure $ Just next
-  pure Nothing
+    Nothing -> pure Nothing
 
-disconnectChan :: STM.TVar Channels -> ID -> STM ()
-disconnectChan channels = STM.modifyTVar channels . HM.adjust closeChan
+inserClient :: STM.TVar Channels -> ID -> Int -> Ws.Connection -> STM ()
+inserClient channels chanId clientId c =
+  STM.modifyTVar channels $ HM.adjust insertConnection chanId
+  where
+    insertConnection :: Channel -> Channel
+    insertConnection chan = chan {chanConns = IM.insert clientId c $ chanConns chan}
 
-disconnectClient :: STM.TVar Channels -> ID -> Int -> STM ()
-disconnectClient channels chanId clientId =
+disconnectChan :: STM.TVar Channels -> ID -> STM (Maybe [Ws.Connection])
+disconnectChan channels chanId = do
+  STM.modifyTVar channels $ HM.adjust closeChan chanId
+  fmap (IM.elems . chanConns) . HM.lookup chanId <$> STM.readTVar channels
+  where
+    closeChan :: Channel -> Channel
+    closeChan chan = chan {chanIsClosed = True}
+
+disconnectClient :: STM.TVar Channels -> ID -> Int -> STM (Maybe Ws.Connection)
+disconnectClient channels chanId clientId = do
+  mc <- ((IM.lookup clientId . chanConns) <=< HM.lookup chanId) <$> STM.readTVar channels
   STM.modifyTVar channels $ HM.adjust (removeClient clientId) chanId
-
--- broadcast :: Channel -> Text ->
-
-closeChan :: Channel -> Channel
-closeChan chan = chan {chanIsClosed = True}
-
-removeClient :: Int -> Channel -> Channel
-removeClient clientId chan =
-  chan {chanConns = IM.delete clientId $ chanConns chan}
+  pure mc
+  where
+    removeClient :: Int -> Channel -> Channel
+    removeClient clientId chan =
+      chan {chanConns = IM.delete clientId $ chanConns chan}
 
 redirectTo :: MonadIO m => Text -> AppT m ()
 redirectTo url =
