@@ -11,15 +11,26 @@ function main(e) {
   connect(id);
 }
 
+let socket;
+
 function connect(fixedId) {
   const url = wsUrl(fixedId);
-  const socket = new WebSocket(url);
+  if (socket) {
+    socket.close();
+  }
+  socket = new WebSocket(url);
 
-  const convert = new Convert({ stream: false });
+  const handleMessage = makeHandleMessage(new Convert({ stream: false }));
 
-  socket.onmessage = makeHandleMessage(convert);
+  socket.onopen = handleOpen;
+  socket.onmessage = handleMessage;
   socket.onclose = handleClose;
   socket.onerror = handleError;
+
+  const output = document.getElementById("output");
+  output.innerHTML = "";
+
+  removeAlert();
 }
 
 function wsUrl(givenId) {
@@ -31,21 +42,21 @@ function wsUrl(givenId) {
 }
 
 function handleError(_error) {
-  const alert = document.getElementById("alert");
-  alert.classList.add("alert");
-  alert.innerHTML = "There was an error with the socket connection.";
-  alert.classList.remove("hidden");
+  addAlert("There was an error with the socket connection.");
 
   window.scrollTo({ top: 0, behavior: "instant" });
 }
 
 function handleClose(_closeEvent) {
-  const alert = document.getElementById("alert");
-  alert.classList.add("alert");
-  alert.innerHTML = "This channel is closed!";
-  alert.classList.remove("hidden");
+  addAlert("This session is closed!");
 
   window.scrollTo({ top: 0, behavior: "instant" });
+}
+
+function handleOpen(_openEvent) {
+  addAlert("Connected to session!!!");
+
+  setTimeout(removeAlert, 5 * 1000);
 }
 
 const makeHandleMessage = (convert) => {
@@ -60,3 +71,17 @@ const makeHandleMessage = (convert) => {
 
   return handleMessage;
 };
+
+function addAlert(msg) {
+  const alert = document.getElementById("alert");
+  alert.innerHTML = msg;
+  alert.classList.remove("hidden");
+  alert.classList.add("alert");
+}
+
+function removeAlert() {
+  const alert = document.getElementById("alert");
+  alert.innerHTML = "";
+  alert.classList.remove("alert");
+  alert.classList.add("hidden");
+}
