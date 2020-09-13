@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 2069c9552bc5fd56b61a89a05c41ecf225eb8fbb67a6bc3cca9011567a796df6
+-- hash: 298be38bd21b044a9d4508f84ef1957af67e3d7c19d299a9e68a92508a8671e1
 
 name:           webout-server
 version:        0.1.0.0
@@ -29,11 +29,12 @@ source-repository head
 library
   exposed-modules:
       Api
-      Api.Cast
-      Api.Cast.Models
+      Api.Session
+      Api.Session.Models
       Config
       Database
       General.Util
+      General.WebSockets
       Init
       Logger
   other-modules:

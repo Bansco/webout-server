@@ -73,7 +73,7 @@ acquireConfig = do
         configPort = port,
         configEkgServer = serverThreadId ekgServer,
         configClientUrl = clientUrl,
-        configCastChannels = channels
+        configSessionChannels = channels
       }
 
 -- | Takes care of cleaning up 'Config' resources
