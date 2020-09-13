@@ -60,7 +60,7 @@ acquireConfig :: IO Config
 acquireConfig = do
   port <- lookupSetting "PORT" 9000
   env <- lookupSetting "ENV" Development
-  clientUrl <- lookupSetting "CLIENT_URL" "http://localhost:3000"
+  clientUrl <- lookupSetting "CLIENT_URL" "http://localhost:9000"
   logEnv <- defaultLogEnv
   pool <- makePool env logEnv
   ekgServer <- forkServer "localhost" =<< lookupSetting "PORT_EKG" 8000

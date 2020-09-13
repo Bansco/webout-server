@@ -38,14 +38,14 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import qualified Data.UUID as UUID
-import General.Util ((<&>), (<|>))
+import General.Util (filter, whenJust, (<&>), (<|>))
 import qualified Network.URI as URI
 import qualified Network.WebSockets as Ws
 import Servant ((:<|>) (..), (:>))
 import qualified Servant
 import Servant.API.WebSocket (WebSocketPending)
 import qualified System.Random as Random
-import Prelude
+import Prelude hiding (filter)
 
 type CastAPI = CreateRoute :<|> CastWsRoute
 
@@ -92,26 +92,21 @@ castWsHandler id (Just token) pendingC = do
   mbChannel <- liftIO $ HM.lookup (ID id) <$> STM.readTVarIO channels
   case mbChannel of
     Nothing -> liftIO $ channelNotFound pendingC
+    Just chan | chanIsClosed chan -> liftIO $ channelNotFound pendingC
     Just chan -> do
-      -- TODO catch close error and cleanup
       Monad.when (chanToken chan /= Token token) $ liftIO $ unauthorized pendingC
       c <- liftIO $ Ws.acceptRequest pendingC
       liftIO $
-        flip
-          Exception.finally
-          ( do
-              clients <- fromMaybe [] <$> STM.atomically (disconnectChan channels (ID id))
-              -- TODO errors on close clients
-              Monad.forM_ clients $ flip Ws.sendClose ("Bye" :: Text)
+        Exception.finally
+          ( pingThread c $
+              Monad.forever $ do
+                msg <- Ws.receiveData c
+                mbChannel <- HM.lookup (ID id) <$> STM.readTVarIO channels
+                whenJust mbChannel $ broadcast msg
           )
-          $ Ws.withPingThread c 30 mempty $
-            Monad.forever $ do
-              msg :: Text <- Ws.receiveData c
-              -- TODO how to avoid reading channel if we know channel is defined here
-              mbChannel <- HM.lookup (ID id) <$> STM.readTVarIO channels
-              case mbChannel of
-                Nothing -> putStrLn "channel lost" -- TODO <----
-                Just chan -> broadcast chan msg
+          $ do
+            mbClients <- STM.atomically (disconnectChan channels (ID id))
+            whenJust mbClients broadcastClose
 castWsHandler id Nothing pendingC = do
   channels <- asks configCastChannels
   mbClientId <- liftIO $ STM.atomically $ getChanId channels (ID id)
@@ -122,33 +117,39 @@ castWsHandler id Nothing pendingC = do
       c <- liftIO $ Ws.acceptRequest pendingC
       liftIO $ STM.atomically $ inserClient channels (ID id) clientId c
 
-      -- TODO how to keep this connected and pinging without receiving ????
       liftIO $
-        Exception.finally (pingThread c) $ do
+        Exception.finally (pingThreadWithBlock c) $ do
+          -- TODO how to keep this connected and pinging without receiving ????
           STM.atomically $ disconnectClient channels (ID id) clientId
-          Ws.sendClose c ("Bye" :: Text) -- TODO what to send as close?
+          Ws.sendClose c ("Bye" :: Text)
 
-pingThread :: Ws.Connection -> IO ()
-pingThread c = Ws.withPingThread c 30 mempty $ Monad.void (Ws.receiveData c :: IO Text)
+pingThread :: Ws.Connection -> IO a -> IO ()
+pingThread c action =
+  Ws.withPingThread c 30 mempty $ Monad.void action
 
-broadcast :: Channel -> Text -> IO ()
-broadcast chan msg = Monad.forM_ (chanConns chan) $ \c ->
-  Exception.catch (Ws.sendTextData c msg) catchAll
-  where
-    -- we ignore the disconnection, as the listener endpoint should handle it
-    catchAll :: Ws.ConnectionException -> IO ()
-    catchAll _ = mempty
+pingThreadWithBlock :: Ws.Connection -> IO ()
+pingThreadWithBlock c = pingThread c (Ws.receiveData c :: IO Text)
+
+broadcast :: Text -> Channel -> IO ()
+broadcast msg chan = Monad.forM_ (chanConns chan) $ \c ->
+  Exception.catch (Ws.sendTextData c msg) catchConnectionException
+
+broadcastClose :: [Ws.Connection] -> IO ()
+broadcastClose clients = Monad.forM_ clients $ \c ->
+  Exception.catch (Ws.sendClose c ("Bye" :: Text)) catchConnectionException
+
+-- ignore the disconnection as the listener endpoint should handle it
+catchConnectionException :: Ws.ConnectionException -> IO ()
+catchConnectionException _ = mempty
 
 getChanId :: STM.TVar Channels -> ID -> STM (Maybe Int)
 getChanId channels chanId = do
-  mbChannel <- HM.lookup chanId <$> STM.readTVar channels
-  case mbChannel of
-    Just chan -> do
-      i <- STM.readTVar $ chanCounter chan
-      let next = i + 1
-      STM.writeTVar (chanCounter chan) next
-      pure $ Just next
-    Nothing -> pure Nothing
+  mbChannel <- filter (not . chanIsClosed) . HM.lookup chanId <$> STM.readTVar channels
+  whenJust mbChannel $ \chan -> do
+    i <- STM.readTVar $ chanCounter chan
+    let next = i + 1
+    STM.writeTVar (chanCounter chan) next
+    pure next
 
 inserClient :: STM.TVar Channels -> ID -> Int -> Ws.Connection -> STM ()
 inserClient channels chanId clientId c =
@@ -159,15 +160,16 @@ inserClient channels chanId clientId c =
 
 disconnectChan :: STM.TVar Channels -> ID -> STM (Maybe [Ws.Connection])
 disconnectChan channels chanId = do
+  mbClients <- fmap (IM.elems . chanConns) . HM.lookup chanId <$> STM.readTVar channels
   STM.modifyTVar channels $ HM.adjust closeChan chanId
-  fmap (IM.elems . chanConns) . HM.lookup chanId <$> STM.readTVar channels
+  pure mbClients
   where
     closeChan :: Channel -> Channel
-    closeChan chan = chan {chanIsClosed = True}
+    closeChan chan = chan {chanIsClosed = True, chanConns = IM.empty}
 
 disconnectClient :: STM.TVar Channels -> ID -> Int -> STM (Maybe Ws.Connection)
 disconnectClient channels chanId clientId = do
-  mc <- ((IM.lookup clientId . chanConns) <=< HM.lookup chanId) <$> STM.readTVar channels
+  mc <- (IM.lookup clientId . chanConns <=< HM.lookup chanId) <$> STM.readTVar channels
   STM.modifyTVar channels $ HM.adjust (removeClient clientId) chanId
   pure mc
   where
