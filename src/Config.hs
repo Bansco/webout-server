@@ -64,7 +64,6 @@ type App = AppT IO
 -- | The Config for our application is (for now) the 'Environment' we're
 -- running in and a Persistent 'ConnectionPool'.
 data Config = Config
-  -- TODO config object from JSON ???
   { configPool :: ConnectionPool,
     configEnv :: Environment,
     configEkgServer :: ThreadId,
