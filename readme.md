@@ -12,4 +12,5 @@ stack run
 
 ### Client
 
-There's a simple client in [client/](/client), see the docs to run it.
+Check [Bansco/webout-client](https://github.com/Bansco/webout-client) for the
+web client.
