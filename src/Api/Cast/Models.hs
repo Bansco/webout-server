@@ -32,12 +32,9 @@ import qualified Network.WebSockets.Connection as Ws
 import Text.Casing (camel)
 import Prelude
 
--- -- Models ---
--- TODO: Random instance
 newtype ID = ID Text
   deriving (Show, Eq, Generic, Json.FromJSON, Json.ToJSON, H.Hashable)
 
--- TODO: Random instance
 newtype Token = Token Text
   deriving (Show, Eq, Generic, Json.FromJSON, Json.ToJSON)
 
@@ -54,8 +51,6 @@ instance Json.ToJSON CreateResponse where
 instance Json.FromJSON CreateResponse where
   parseJSON = Json.genericParseJSON $ dropLabelPrefix "create"
 
--- { frame: string, data: string }
--- { frame: string, data: string }
 data Frame = Frame
   { frameTime :: Text, -- TODO
     frameData :: Text
