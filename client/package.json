@@ -1,0 +1,14 @@
+{
+  "scripts": {
+    "start": "serve",
+    "build": "NODE_ENV=production webpack --config webpack.config.js",
+    "build:watch": "webpack --config webpack.config.js --watch"
+  },
+  "dependencies": {
+    "ansi-to-html": "^0.6.14",
+    "serve": "^11.3.2",
+    "webpack": "^4.44.1",
+    "webpack-cli": "^3.3.12"
+  },
+  "devDependencies": {}
+}
