@@ -15,7 +15,7 @@ module Config
   )
 where
 
-import Api.Cast.Models
+import Api.Session.Models
 import Control.Concurrent (ThreadId)
 import Control.Concurrent.STM as STM
 import Control.Exception (throwIO)
@@ -70,7 +70,7 @@ data Config = Config
     configLogEnv :: LogEnv,
     configPort :: Port,
     configClientUrl :: Text,
-    configCastChannels :: STM.TVar Channels
+    configSessionChannels :: STM.TVar Channels
   }
 
 -- | Katip instance for @AppT m@

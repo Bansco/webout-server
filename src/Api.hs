@@ -7,7 +7,7 @@ module Api
   )
 where
 
-import Api.Cast (CastAPI, castApi, castServer)
+import Api.Session (SessionAPI, sessionApi, sessionServer)
 import Config (AppT (..), Config (..))
 import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Reader (runReaderT)
@@ -34,7 +34,7 @@ appToServer cfg = hoistServer appApi (convertApp cfg) appServer
 convertApp :: Config -> AppT IO a -> Handler a
 convertApp cfg appt = Handler $ runReaderT (runApp appt) cfg
 
-type AppAPI = HealthzRoute :<|> "api" :> "cast" :> CastAPI
+type AppAPI = HealthzRoute :<|> "api" :> "session" :> SessionAPI
 
 healthzHandler :: MonadIO m => AppT m Text
 healthzHandler = pure "200 Ok"
@@ -44,7 +44,7 @@ type HealthzRoute =
     :> Servant.Get '[Servant.PlainText] Text
 
 appServer :: MonadIO m => Servant.ServerT AppAPI (AppT m)
-appServer = healthzHandler :<|> castServer
+appServer = healthzHandler :<|> sessionServer
 
 appApi :: Servant.Proxy AppAPI
 appApi = Servant.Proxy
