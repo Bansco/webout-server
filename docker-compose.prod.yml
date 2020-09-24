@@ -1,7 +1,7 @@
 version: '3.2'
 
 services:
-  tsplay:
+  webout-server:
     image: gillchristian/webout-server:latest
     ports:
       - "${PORT}:${PORT}"
