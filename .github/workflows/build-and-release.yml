@@ -63,7 +63,7 @@ jobs:
       if: startsWith(github.ref, 'refs/tags/')
       uses: elgohr/Publish-Docker-Github-Action@master
       env:
-        BINARY_PATH: "webout-server"
+        BINARY_PATH: "webout-server-exe"
       with:
         name: gillchristian/webout-server
         username: gillchristian
