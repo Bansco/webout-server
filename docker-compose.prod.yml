@@ -1,0 +1,13 @@
+version: '3.2'
+
+services:
+  tsplay:
+    image: gillchristian/webout-server:latest
+    ports:
+      - "${PORT}:${PORT}"
+    env_file:
+      - .env
+    volumes:
+      - type: bind
+        source: ./database
+        target: /opt/webout-server/database
