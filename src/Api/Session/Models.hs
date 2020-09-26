@@ -17,6 +17,7 @@ module Api.Session.Models
     Token (..),
     Channel (..),
     Channels (..),
+    sessionUrl,
     unId,
   )
 where
@@ -87,3 +88,6 @@ data Channel = Channel
   }
 
 type Channels = HM.HashMap ID Channel
+
+sessionUrl :: ID -> Text -> Text
+sessionUrl (ID id) clientUrl = clientUrl <> "/session/" <> id
