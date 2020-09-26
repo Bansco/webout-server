@@ -18,8 +18,8 @@ where
 
 import Api.Session.Models
 import Config (AppT (..), Config (..))
-import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.STM (STM)
+import Control.Concurrent (forkIO, threadDelay)
 import qualified Control.Concurrent.STM as STM
 import qualified Control.Exception as Exception
 import Control.Monad ((<=<))
@@ -69,13 +69,13 @@ sessionApi = Servant.Proxy
 createHandler :: MonadIO m => AppT m CreateResponse
 createHandler = do
   channels <- asks configSessionChannels
-  clientUrl <- asks configClientUrl
   sessionId <- liftIO $ ID . UUID.toText <$> Random.randomIO
   token <- liftIO $ Token . UUID.toText <$> Random.randomIO
+  url <- sessionUrl sessionId <$> asks configClientUrl
   counter <- liftIO $ STM.newTVarIO 0
   let newChan = Channel False [] token counter IM.empty
   liftIO $ STM.atomically $ STM.modifyTVar channels $ HM.insert sessionId newChan
-  pure $ CreateResponse sessionId (clientUrl <> "/session/" <> unId sessionId) token
+  pure $ CreateResponse sessionId url token
 
 -- Emitter client
 sessionWsHandler :: MonadIO m => ID -> Maybe Token -> Ws.PendingConnection -> AppT m ()
